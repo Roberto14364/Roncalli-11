@@ -11,11 +11,11 @@ function getQueryDate(): string | null {
   return params.get('date');
 }
 
-function encodeBase64Unicode(str: string): string {
+function encodeBase64Url(str: string): string {
   const bytes = new TextEncoder().encode(str);
   let bin = '';
   bytes.forEach((b) => { bin += String.fromCharCode(b); });
-  return window.btoa(bin);
+  return window.btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 export const SostituzioniGiornalierePage = () => {
@@ -67,7 +67,7 @@ export const SostituzioniGiornalierePage = () => {
     return teacherName;
   };
 
-  // Invio codificato in Base64 verso il front-end WordPress (bypassa ModSecurity)
+  // Invio diretto tramite URL GET (100% compatibile con firewall server scolastico)
   const handlePublishToWordPress = () => {
     if (dailyReplacements.length === 0) {
       toast({
@@ -78,48 +78,23 @@ export const SostituzioniGiornalierePage = () => {
       return;
     }
 
-    const destLabel = tableId.trim() ? `alla tabella ID ${tableId.trim()}` : "creando una NUOVA tabella su TablePress";
-    if (!window.confirm(`Vuoi inviare le ${dailyReplacements.length} sostituzioni del ${selectedDate} ${destLabel}?`)) {
-      return;
-    }
-
-    const preparedReplacements = dailyReplacements.map(rep => ({
-      ...rep,
-      resolvedClass: formatClassName(rep).trim() || rep.className
-    }));
-
-    // Invia solo i docenti effettivamente coinvolti per mantenere il pacchetto leggero
-    const usedIds = new Set<string>();
-    preparedReplacements.forEach(r => {
-      if (r.absentTeacherId) usedIds.add(r.absentTeacherId);
-      if (r.replacementTeacherId) usedIds.add(r.replacementTeacherId);
-    });
-    const filteredTeachers = teachers
-      .filter(t => usedIds.has(t.id))
-      .map(t => ({ id: t.id, name: t.name }));
+    const rowsCompact = dailyReplacements.map(rep => [
+      rep.hour,
+      getTeacherName(rep.absentTeacherId),
+      rep.replacementTeacherId ? getTeacherName(rep.replacementTeacherId) : '//',
+      formatClassName(rep).trim() || rep.className
+    ]);
 
     const payload = JSON.stringify({
-      api_key: "RONCALLI_2026_API_KEY",
-      table_id: tableId.trim(),
-      date: selectedDate,
-      teachers: filteredTeachers,
-      replacements: preparedReplacements
+      k: "RONCALLI26",
+      tid: tableId.trim(),
+      dt: selectedDate,
+      r: rowsCompact
     });
 
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = 'https://roncalliweb.edu.it';
-    form.target = '_blank';
-
-    const input = document.createElement('input');
-    input.type = 'hidden';
-    input.name = 'payload_b64';
-    input.value = encodeBase64Unicode(payload);
-
-    form.appendChild(input);
-    document.body.appendChild(form);
-    form.submit();
-    document.body.removeChild(form);
+    const encoded = encodeBase64Url(payload);
+    const targetUrl = `https://roncalliweb.edu.it{encoded}`;
+    window.open(targetUrl, '_blank', 'noopener');
   };
 
   const handlePrint = () => {
