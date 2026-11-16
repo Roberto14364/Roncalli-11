@@ -6,7 +6,6 @@ import { Printer, Trash2, Send } from 'lucide-react';
 import { formatLocalDate, getTimeRange, SPECIAL_REPLACEMENT_OPTIONS } from '../utils/scheduleUtils';
 import { useToast } from '../hooks/use-toast';
 
-// Funzione per leggere la data dalla query string
 function getQueryDate(): string | null {
   const params = new URLSearchParams(window.location.search);
   return params.get('date');
@@ -15,12 +14,10 @@ function getQueryDate(): string | null {
 export const SostituzioniGiornalierePage = () => {
   const { teachers, replacements, deleteReplacement } = useData();
   const [selectedDate, setSelectedDate] = useState<string>(formatLocalDate(new Date()));
-  const [tableId, setTableId] = useState<string>('64');
-  const [isPublishing, setIsPublishing] = useState<boolean>(false);
+  const [tableId, setTableId] = useState<string>('');
   const tableRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  // Imposta la data dalla query se esiste
   useEffect(() => {
     const qDate = getQueryDate();
     if (qDate) {
@@ -35,7 +32,6 @@ export const SostituzioniGiornalierePage = () => {
     return teacher ? teacher.name : 'Docente non trovato';
   };
 
-  // Funzione per formattare la visualizzazione della classe
   const formatClassName = (replacement: any) => {
     const absentTeacher = teachers.find(t => t.id === replacement.absentTeacherId);
     if (absentTeacher) {
@@ -53,7 +49,6 @@ export const SostituzioniGiornalierePage = () => {
     return replacement.className;
   };
 
-  // Funzione per visualizzare il nome del docente sostituto con l'indicazione del recupero permesso
   const formatReplacementTeacherDisplay = (replacement: any) => {
     if (!replacement.replacementTeacherId) {
       return replacement.className;
@@ -65,8 +60,8 @@ export const SostituzioniGiornalierePage = () => {
     return teacherName;
   };
 
-  // Invio diretto a TablePress su WordPress
-  const handlePublishToWordPress = async () => {
+  // Invio diretto tramite Form POST verso WordPress (aggira blocchi CORS e Firewall)
+  const handlePublishToWordPress = () => {
     if (dailyReplacements.length === 0) {
       toast({
         title: "Nessun dato da inviare",
@@ -76,53 +71,38 @@ export const SostituzioniGiornalierePage = () => {
       return;
     }
 
-    if (!window.confirm(`Vuoi inviare le ${dailyReplacements.length} sostituzioni del ${selectedDate} alla tabella TablePress ID ${tableId}?`)) {
+    const destLabel = tableId.trim() ? `alla tabella ID ${tableId.trim()}` : "creando una NUOVA tabella su TablePress";
+    if (!window.confirm(`Vuoi inviare le ${dailyReplacements.length} sostituzioni del ${selectedDate} ${destLabel}?`)) {
       return;
     }
 
-    setIsPublishing(true);
-    try {
-      const preparedReplacements = dailyReplacements.map(rep => ({
-        ...rep,
-        resolvedClass: formatClassName(rep).trim() || rep.className
-      }));
+    const preparedReplacements = dailyReplacements.map(rep => ({
+      ...rep,
+      resolvedClass: formatClassName(rep).trim() || rep.className
+    }));
 
-      const response = await fetch("https://roncalliweb.edu.it", {
-        method: "POST",
-        headers: {
-          "Content-Type": "text/plain;charset=UTF-8"
-        },
-        body: JSON.stringify({
-          api_key: "RONCALLI_2026_API_KEY",
-          table_id: tableId.trim() || "64",
-          date: selectedDate,
-          teachers: teachers,
-          replacements: preparedReplacements
-        })
-      });
+    const payload = JSON.stringify({
+      api_key: "RONCALLI_2026_API_KEY",
+      table_id: tableId.trim(),
+      date: selectedDate,
+      teachers: teachers,
+      replacements: preparedReplacements
+    });
 
-      const res = await response.json();
-      if (res.ok) {
-        toast({
-          title: "Pubblicato su WordPress!",
-          description: res.msg,
-        });
-      } else {
-        toast({
-          title: "Errore WordPress",
-          description: res.msg || "Impossibile aggiornare la tabella.",
-          variant: "destructive"
-        });
-      }
-    } catch (err: any) {
-      toast({
-        title: "Errore di connessione",
-        description: err.message || "Verifica che lo Snippet 10 sia attivo su WordPress.",
-        variant: "destructive"
-      });
-    } finally {
-      setIsPublishing(false);
-    }
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = 'https://roncalliweb.edu.it';
+    form.target = '_blank';
+
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'payload';
+    input.value = payload;
+
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
+    document.body.removeChild(form);
   };
 
   const handlePrint = () => {
@@ -190,15 +170,16 @@ export const SostituzioniGiornalierePage = () => {
 
             <div>
               <label htmlFor="tableId" className="block text-gray-700 mb-2 font-medium">
-                ID Tabella WP:
+                ID Tabella WP (vuoto = nuova):
               </label>
               <input
                 type="text"
                 id="tableId"
+                placeholder="Nuova"
                 value={tableId}
                 onChange={(e) => setTableId(e.target.value)}
-                className="w-20 p-2 border border-gray-300 rounded text-center font-bold focus:outline-none focus:ring-2 focus:ring-green-600"
-                title="ID della tabella TablePress su WordPress (es. 64)"
+                className="w-28 p-2 border border-gray-300 rounded text-center font-bold focus:outline-none focus:ring-2 focus:ring-green-600"
+                title="Lascia vuoto per creare una nuova tabella, oppure scrivi un ID esistente (es. 64)"
               />
             </div>
           </div>
@@ -206,11 +187,10 @@ export const SostituzioniGiornalierePage = () => {
           <div className="flex flex-wrap gap-2">
             <Button 
               onClick={handlePublishToWordPress}
-              disabled={isPublishing}
               className="bg-green-700 hover:bg-green-800 text-white"
             >
               <Send className="w-4 h-4 mr-2" />
-              {isPublishing ? 'Invio in corso...' : 'Pubblica su WordPress'}
+              Pubblica su WordPress
             </Button>
 
             <Button 
