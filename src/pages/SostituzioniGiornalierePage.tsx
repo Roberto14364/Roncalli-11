@@ -11,10 +11,17 @@ function getQueryDate(): string | null {
   return params.get('date');
 }
 
+function encodeBase64Unicode(str: string): string {
+  const bytes = new TextEncoder().encode(str);
+  let bin = '';
+  bytes.forEach((b) => { bin += String.fromCharCode(b); });
+  return window.btoa(bin);
+}
+
 export const SostituzioniGiornalierePage = () => {
   const { teachers, replacements, deleteReplacement } = useData();
   const [selectedDate, setSelectedDate] = useState<string>(formatLocalDate(new Date()));
-  const [tableId, setTableId] = useState<string>('');
+  const [tableId, setTableId] = useState<string>('90');
   const tableRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -60,7 +67,7 @@ export const SostituzioniGiornalierePage = () => {
     return teacherName;
   };
 
-  // Invio diretto tramite Form POST verso WordPress (aggira blocchi CORS e Firewall)
+  // Invio codificato in Base64 verso il front-end WordPress (bypassa ModSecurity)
   const handlePublishToWordPress = () => {
     if (dailyReplacements.length === 0) {
       toast({
@@ -81,11 +88,21 @@ export const SostituzioniGiornalierePage = () => {
       resolvedClass: formatClassName(rep).trim() || rep.className
     }));
 
+    // Invia solo i docenti effettivamente coinvolti per mantenere il pacchetto leggero
+    const usedIds = new Set<string>();
+    preparedReplacements.forEach(r => {
+      if (r.absentTeacherId) usedIds.add(r.absentTeacherId);
+      if (r.replacementTeacherId) usedIds.add(r.replacementTeacherId);
+    });
+    const filteredTeachers = teachers
+      .filter(t => usedIds.has(t.id))
+      .map(t => ({ id: t.id, name: t.name }));
+
     const payload = JSON.stringify({
       api_key: "RONCALLI_2026_API_KEY",
       table_id: tableId.trim(),
       date: selectedDate,
-      teachers: teachers,
+      teachers: filteredTeachers,
       replacements: preparedReplacements
     });
 
@@ -96,8 +113,8 @@ export const SostituzioniGiornalierePage = () => {
 
     const input = document.createElement('input');
     input.type = 'hidden';
-    input.name = 'payload';
-    input.value = payload;
+    input.name = 'payload_b64';
+    input.value = encodeBase64Unicode(payload);
 
     form.appendChild(input);
     document.body.appendChild(form);
@@ -170,7 +187,7 @@ export const SostituzioniGiornalierePage = () => {
 
             <div>
               <label htmlFor="tableId" className="block text-gray-700 mb-2 font-medium">
-                ID Tabella WP (vuoto = nuova):
+                ID Tabella WP:
               </label>
               <input
                 type="text"
@@ -178,8 +195,8 @@ export const SostituzioniGiornalierePage = () => {
                 placeholder="Nuova"
                 value={tableId}
                 onChange={(e) => setTableId(e.target.value)}
-                className="w-28 p-2 border border-gray-300 rounded text-center font-bold focus:outline-none focus:ring-2 focus:ring-green-600"
-                title="Lascia vuoto per creare una nuova tabella, oppure scrivi un ID esistente (es. 64)"
+                className="w-24 p-2 border border-gray-300 rounded text-center font-bold focus:outline-none focus:ring-2 focus:ring-green-600"
+                title="Inserisci l'ID della tabella su TablePress (es. 90)"
               />
             </div>
           </div>
