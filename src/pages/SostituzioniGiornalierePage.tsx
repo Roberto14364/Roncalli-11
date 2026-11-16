@@ -60,7 +60,6 @@ export const SostituzioniGiornalierePage = () => {
     return teacherName;
   };
 
-  // Copia i dati negli appunti e apre direttamente la tabella su WordPress
   const handlePublishToWordPress = async () => {
     if (dailyReplacements.length === 0) {
       toast({
@@ -87,14 +86,14 @@ export const SostituzioniGiornalierePage = () => {
       await navigator.clipboard.writeText(pacchetto);
       toast({
         title: "Dati copiati! Apertura TablePress...",
-        description: "Nella pagina che si apre, clicca su 'Incolla da App' nella barra verde.",
+        description: "Nella pagina che si apre, clicca sul pulsante blu 'Incolla da App'.",
       });
     } catch {
       window.prompt("Copia questo codice (Cmd+C / Ctrl+C) e poi incollalo su WordPress:", pacchetto);
     }
 
     const tid = tableId.trim() || '90';
-    const wpUrl = `https://roncalliweb.edu.it{encodeURIComponent(tid)}`;
+    const wpUrl = "https://roncalliweb.edu.it" + encodeURIComponent(tid);
     window.open(wpUrl, '_blank', 'noopener');
   };
 
