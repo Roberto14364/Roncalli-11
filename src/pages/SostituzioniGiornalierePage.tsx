@@ -11,13 +11,6 @@ function getQueryDate(): string | null {
   return params.get('date');
 }
 
-function encodeBase64Url(str: string): string {
-  const bytes = new TextEncoder().encode(str);
-  let bin = '';
-  bytes.forEach((b) => { bin += String.fromCharCode(b); });
-  return window.btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
 export const SostituzioniGiornalierePage = () => {
   const { teachers, replacements, deleteReplacement } = useData();
   const [selectedDate, setSelectedDate] = useState<string>(formatLocalDate(new Date()));
@@ -67,8 +60,8 @@ export const SostituzioniGiornalierePage = () => {
     return teacherName;
   };
 
-  // Invio diretto tramite URL GET (100% compatibile con firewall server scolastico)
-  const handlePublishToWordPress = () => {
+  // Copia i dati negli appunti e apre direttamente la tabella su WordPress
+  const handlePublishToWordPress = async () => {
     if (dailyReplacements.length === 0) {
       toast({
         title: "Nessun dato da inviare",
@@ -85,16 +78,24 @@ export const SostituzioniGiornalierePage = () => {
       formatClassName(rep).trim() || rep.className
     ]);
 
-    const payload = JSON.stringify({
-      k: "RONCALLI26",
-      tid: tableId.trim(),
+    const pacchetto = "RONCALLI_SYNC::" + JSON.stringify({
       dt: selectedDate,
       r: rowsCompact
     });
 
-    const encoded = encodeBase64Url(payload);
-    const targetUrl = `https://roncalliweb.edu.it{encoded}`;
-    window.open(targetUrl, '_blank', 'noopener');
+    try {
+      await navigator.clipboard.writeText(pacchetto);
+      toast({
+        title: "Dati copiati! Apertura TablePress...",
+        description: "Nella pagina che si apre, clicca su 'Incolla da App' nella barra verde.",
+      });
+    } catch {
+      window.prompt("Copia questo codice (Cmd+C / Ctrl+C) e poi incollalo su WordPress:", pacchetto);
+    }
+
+    const tid = tableId.trim() || '90';
+    const wpUrl = `https://roncalliweb.edu.it{encodeURIComponent(tid)}`;
+    window.open(wpUrl, '_blank', 'noopener');
   };
 
   const handlePrint = () => {
@@ -167,7 +168,6 @@ export const SostituzioniGiornalierePage = () => {
               <input
                 type="text"
                 id="tableId"
-                placeholder="Nuova"
                 value={tableId}
                 onChange={(e) => setTableId(e.target.value)}
                 className="w-24 p-2 border border-gray-300 rounded text-center font-bold focus:outline-none focus:ring-2 focus:ring-green-600"
