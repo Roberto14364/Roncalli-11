@@ -93,8 +93,9 @@ export const SostituzioniGiornalierePage = () => {
     }
 
     const tid = tableId.trim() || '90';
-    const wpUrl = "https://roncalliweb.edu.it" + encodeURIComponent(tid);
-    window.open(wpUrl, '_blank', 'noopener');
+    const base = "https://roncalliweb.edu.it";
+    const query = "?page=tablepress&action=edit&table_id=" + encodeURIComponent(tid);
+    window.open(base + query, '_blank', 'noopener');
   };
 
   const handlePrint = () => {
