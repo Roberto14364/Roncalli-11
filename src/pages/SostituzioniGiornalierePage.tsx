@@ -82,7 +82,6 @@ export const SostituzioniGiornalierePage = () => {
 
     setIsPublishing(true);
     try {
-      // Prepara le sostituzioni risolte con la classe effettiva
       const preparedReplacements = dailyReplacements.map(rep => ({
         ...rep,
         resolvedClass: formatClassName(rep).trim() || rep.className
@@ -91,10 +90,10 @@ export const SostituzioniGiornalierePage = () => {
       const response = await fetch("https://roncalliweb.edu.it", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          "X-Roncalli-Key": "RONCALLI_2026_API_KEY"
+          "Content-Type": "text/plain;charset=UTF-8"
         },
         body: JSON.stringify({
+          api_key: "RONCALLI_2026_API_KEY",
           table_id: tableId.trim() || "64",
           date: selectedDate,
           teachers: teachers,
