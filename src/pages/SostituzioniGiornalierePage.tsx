@@ -1,9 +1,8 @@
-
 import { useRef, useState, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
 import { Button } from '../components/ui/button';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { Printer, Trash2 } from 'lucide-react';
+import { Printer, Trash2, Send } from 'lucide-react';
 import { formatLocalDate, getTimeRange, SPECIAL_REPLACEMENT_OPTIONS } from '../utils/scheduleUtils';
 import { useToast } from '../hooks/use-toast';
 
@@ -16,6 +15,8 @@ function getQueryDate(): string | null {
 export const SostituzioniGiornalierePage = () => {
   const { teachers, replacements, deleteReplacement } = useData();
   const [selectedDate, setSelectedDate] = useState<string>(formatLocalDate(new Date()));
+  const [tableId, setTableId] = useState<string>('64');
+  const [isPublishing, setIsPublishing] = useState<boolean>(false);
   const tableRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -36,47 +37,93 @@ export const SostituzioniGiornalierePage = () => {
 
   // Funzione per formattare la visualizzazione della classe
   const formatClassName = (replacement: any) => {
-    // Per tutte le sostituzioni, prima cerchiamo la classe originale
     const absentTeacher = teachers.find(t => t.id === replacement.absentTeacherId);
     if (absentTeacher) {
-      // Ottieni il giorno della settimana dalla data
       const date = new Date(replacement.date);
       const dayNames = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato'];
       const day = dayNames[date.getDay()];
-      
-      // Cerca la classe originale nell'orario del docente assente
       const originalClass = absentTeacher.schedule[day]?.[replacement.hour];
-      
       if (originalClass) {
         return originalClass;
       }
     }
-    
-    // Se non troviamo una classe originale e il valore è un'opzione speciale,
-    // restituiamo un valore generico
     if (SPECIAL_REPLACEMENT_OPTIONS.includes(replacement.className)) {
-      return " "; // Oppure "Non specificata" se preferisci mostrare un testo
+      return " ";
     }
-    
-    // Fallback: mostra quello che c'è nel campo className se non è un'opzione speciale
     return replacement.className;
   };
 
   // Funzione per visualizzare il nome del docente sostituto con l'indicazione del recupero permesso
   const formatReplacementTeacherDisplay = (replacement: any) => {
-    // Se non c'è un docente sostituto, mostra il valore di className
     if (!replacement.replacementTeacherId) {
       return replacement.className;
     }
-    
     const teacherName = getTeacherName(replacement.replacementTeacherId);
-    
-    // Controlla esplicitamente se è un recupero permesso
     if (replacement.className === "Recupero permesso") {
       return `${teacherName} (Per. Rec.)`;
     }
-    
     return teacherName;
+  };
+
+  // Invio diretto a TablePress su WordPress
+  const handlePublishToWordPress = async () => {
+    if (dailyReplacements.length === 0) {
+      toast({
+        title: "Nessun dato da inviare",
+        description: "Non ci sono sostituzioni registrate per la data selezionata.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!window.confirm(`Vuoi inviare le ${dailyReplacements.length} sostituzioni del ${selectedDate} alla tabella TablePress ID ${tableId}?`)) {
+      return;
+    }
+
+    setIsPublishing(true);
+    try {
+      // Prepara le sostituzioni risolte con la classe effettiva
+      const preparedReplacements = dailyReplacements.map(rep => ({
+        ...rep,
+        resolvedClass: formatClassName(rep).trim() || rep.className
+      }));
+
+      const response = await fetch("https://roncalliweb.edu.it", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Roncalli-Key": "RONCALLI_2026_API_KEY"
+        },
+        body: JSON.stringify({
+          table_id: tableId.trim() || "64",
+          date: selectedDate,
+          teachers: teachers,
+          replacements: preparedReplacements
+        })
+      });
+
+      const res = await response.json();
+      if (res.ok) {
+        toast({
+          title: "Pubblicato su WordPress!",
+          description: res.msg,
+        });
+      } else {
+        toast({
+          title: "Errore WordPress",
+          description: res.msg || "Impossibile aggiornare la tabella.",
+          variant: "destructive"
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Errore di connessione",
+        description: err.message || "Verifica che lo Snippet 10 sia attivo su WordPress.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsPublishing(false);
+    }
   };
 
   const handlePrint = () => {
@@ -127,21 +174,46 @@ export const SostituzioniGiornalierePage = () => {
       <h1 className="text-2xl font-bold mb-6">Sostituzioni Giornaliere</h1>
 
       <div className="bg-white p-6 rounded-lg shadow-md mb-8">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-          <div className="mb-4 md:mb-0">
-            <label htmlFor="date" className="block text-gray-700 mb-2">
-              Seleziona Data:
-            </label>
-            <input
-              type="date"
-              id="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-6 gap-4">
+          <div className="flex flex-wrap items-end gap-4">
+            <div>
+              <label htmlFor="date" className="block text-gray-700 mb-2 font-medium">
+                Seleziona Data:
+              </label>
+              <input
+                type="date"
+                id="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="tableId" className="block text-gray-700 mb-2 font-medium">
+                ID Tabella WP:
+              </label>
+              <input
+                type="text"
+                id="tableId"
+                value={tableId}
+                onChange={(e) => setTableId(e.target.value)}
+                className="w-20 p-2 border border-gray-300 rounded text-center font-bold focus:outline-none focus:ring-2 focus:ring-green-600"
+                title="ID della tabella TablePress su WordPress (es. 64)"
+              />
+            </div>
           </div>
           
-          <div className="flex space-x-2">
+          <div className="flex flex-wrap gap-2">
+            <Button 
+              onClick={handlePublishToWordPress}
+              disabled={isPublishing}
+              className="bg-green-700 hover:bg-green-800 text-white"
+            >
+              <Send className="w-4 h-4 mr-2" />
+              {isPublishing ? 'Invio in corso...' : 'Pubblica su WordPress'}
+            </Button>
+
             <Button 
               onClick={handlePrint}
               className="bg-blue-600 hover:bg-blue-700"
